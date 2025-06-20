@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import init_db
 from app.utils.logger import setup_logging
-from app.api.routers import auth
+from app.api.routers import auth_router
 
 
 @asynccontextmanager
@@ -39,7 +39,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router, prefix="/api")
+app.include_router(auth_router.router, prefix="/api")
 
 # Health check endpoint
 @app.get("/health")
