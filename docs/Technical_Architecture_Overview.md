@@ -63,6 +63,7 @@ The application follows a **monolithic architecture** pattern, providing simplic
 - **Runtime**: Python 3.12
 - **Framework**: FastAPI
 - **Language**: Python
+- **Package Manager**: UV (ultraviolet) for fast dependency management
 - **API Style**: RESTful APIs
 - **Authentication**: JWT with session management
 - **Validation**: Pydantic for request/response validation
@@ -294,6 +295,12 @@ CREATE TABLE magazine_content (
 - **Network**: VPC with security group configuration
 - **Backup**: Automated snapshot backups
 
+#### 5.1.2 Python Environment Setup
+- **Package Manager**: UV for fast dependency installation and virtual environment management
+- **Environment Management**: UV-managed virtual environments
+- **Dependency Lock**: `uv.lock` file for reproducible builds
+- **Installation**: Fast parallel dependency resolution and installation
+
 
 ## 6. Performance Optimization
 
@@ -329,3 +336,9 @@ CREATE TABLE magazine_content (
 - **Queue System**: Background job processing for heavy operations
 - **API Rate Limiting**: Advanced rate limiting and throttling
 - **Advanced Monitoring**: APM tools like New Relic or DataDog
+
+### 8.3 Development Workflow
+- **Environment Management**: UV provides fast virtual environment creation and management
+- **Dependency Resolution**: UV's Rust-based resolver provides faster and more reliable dependency resolution
+- **Lock Files**: `uv.lock` ensures reproducible builds across environments
+- **CI/CD Integration**: UV's speed improves build times in continuous integration pipelines
