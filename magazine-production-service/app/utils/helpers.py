@@ -1,61 +1,127 @@
-from typing import Optional, Dict, Any
+"""
+Helper utility functions.
+"""
+
 import re
-from urllib.parse import urlparse
+from typing import Optional
+from datetime import datetime
 
 
-def is_valid_url(url: str) -> bool:
-    """Check if a URL is valid."""
-    try:
-        result = urlparse(url)
-        return all([result.scheme, result.netloc])
-    except Exception:
+def validate_username(username: str) -> bool:
+    """
+    Validate username format.
+    
+    Args:
+        username: Username to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not username or len(username) < 3 or len(username) > 50:
         return False
-
-
-def sanitize_filename(filename: str) -> str:
-    """Sanitize filename by removing unsafe characters."""
-    # Remove unsafe characters
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    # Remove multiple underscores
-    filename = re.sub(r'_+', '_', filename)
-    # Remove leading/trailing underscores and dots
-    filename = filename.strip('_.')
-    return filename
-
-
-def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
-    """Truncate text to specified length."""
-    if len(text) <= max_length:
-        return text
-    return text[:max_length - len(suffix)] + suffix
-
-
-def format_file_size(size_bytes: int) -> str:
-    """Format file size in human readable format."""
-    if size_bytes == 0:
-        return "0B"
     
-    size_names = ["B", "KB", "MB", "GB", "TB"]
-    i = 0
-    while size_bytes >= 1024 and i < len(size_names) - 1:
-        size_bytes /= 1024.0
-        i += 1
-    
-    return f"{size_bytes:.1f}{size_names[i]}"
+    # Check alphanumeric + underscore pattern
+    pattern = r"^[a-zA-Z0-9_]+$"
+    return bool(re.match(pattern, username))
 
 
-def clean_html_content(html_content: str) -> str:
-    """Clean HTML content by removing unwanted tags and formatting."""
-    import re
+def validate_email(email: str) -> bool:
+    """
+    Validate email format.
     
-    # Remove script and style elements
-    html_content = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-    html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    Args:
+        email: Email to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not email:
+        return False
     
-    # Remove HTML comments
-    html_content = re.sub(r'<!--.*?-->', '', html_content, flags=re.DOTALL)
+    # Basic email pattern
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return bool(re.match(pattern, email))
+
+
+def validate_password(password: str) -> bool:
+    """
+    Validate password strength.
     
-    # Replace multiple whitespaces with single space
-    html_content = re.sub(r'\s+', ' ', html_content)
+    Args:
+        password: Password to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not password or len(password) < 4:
+        return False
     
-    return html_content.strip() 
+    return True
+
+
+def format_datetime(dt: datetime) -> str:
+    """
+    Format datetime to ISO string.
+    
+    Args:
+        dt: Datetime object
+        
+    Returns:
+        ISO formatted datetime string
+    """
+    return dt.isoformat()
+
+
+def sanitize_string(value: Optional[str]) -> Optional[str]:
+    """
+    Sanitize string input.
+    
+    Args:
+        value: String to sanitize
+        
+    Returns:
+        Sanitized string or None
+    """
+    if not value:
+        return None
+    
+    # Strip whitespace and convert empty strings to None
+    sanitized = value.strip()
+    return sanitized if sanitized else None
+
+
+def create_api_response(
+    success: bool = True,
+    message: str = "",
+    data: Optional[dict] = None,
+    error: Optional[str] = None,
+    details: Optional[dict] = None
+) -> dict:
+    """
+    Create standardized API response.
+    
+    Args:
+        success: Whether the operation was successful
+        message: Response message
+        data: Response data
+        error: Error code (if any)
+        details: Additional error details
+        
+    Returns:
+        Standardized response dictionary
+    """
+    response = {
+        "success": success,
+        "message": message
+    }
+    
+    if data is not None:
+        response["data"] = data
+    
+    if error:
+        response["error"] = error
+    
+    if details:
+        response["details"] = details
+    
+    return response 

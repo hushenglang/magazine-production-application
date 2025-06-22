@@ -1,38 +1,56 @@
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
+"""
+Magazine Production Service API
+Main FastAPI application entry point.
+"""
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import logging
 
 from app.core.config import settings
-from app.core.database import init_db
-from app.utils.logger import setup_logging
+from app.core.database import create_tables
 from app.api.routers import auth_router
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events."""
+    """Application lifespan manager."""
     # Startup
-    setup_logging()
-    await init_db()
+    logger.info("Starting up Magazine Production Service...")
+    try:
+        # Create database tables
+        await create_tables()
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Error creating database tables: {e}")
+    
     yield
-    # Shutdown - cleanup if needed
+    
+    # Shutdown
+    logger.info("Shutting down Magazine Production Service...")
 
 
-# Create FastAPI app
+# Create FastAPI application
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.VERSION,
-    description="Online Magazine Production Application API",
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
+    title=settings.app_name,
+    version=settings.app_version,
+    description="Authentication and user management service for magazine production application",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,38 +59,47 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router.router, prefix="/api")
 
-# Health check endpoint
+
+@app.get("/")
+async def root():
+    """Root endpoint for health check."""
+    return {
+        "message": f"Welcome to {settings.app_name}",
+        "version": settings.app_version,
+        "status": "healthy"
+    }
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return JSONResponse(
-        content={
-            "status": "healthy",
-            "service": settings.APP_NAME,
-            "version": settings.VERSION
-        }
-    )
+    return {
+        "status": "healthy",
+        "service": settings.app_name,
+        "version": settings.app_version
+    }
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint."""
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Global exception handler."""
+    logger.error(f"Unhandled exception: {exc}")
     return JSONResponse(
+        status_code=500,
         content={
-            "message": f"Welcome to {settings.APP_NAME}",
-            "version": settings.VERSION,
-            "docs": "/docs" if settings.DEBUG else "Documentation not available in production"
+            "success": False,
+            "error": "Internal server error",
+            "message": "An unexpected error occurred"
         }
     )
 
 
 if __name__ == "__main__":
     import uvicorn
-    
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.DEBUG,
-        log_level="debug" if settings.DEBUG else "info"
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug
     ) 

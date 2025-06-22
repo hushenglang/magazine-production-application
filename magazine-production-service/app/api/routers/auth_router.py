@@ -1,136 +1,306 @@
-from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+"""
+Authentication API router.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, get_password_hash
-from app.core.config import settings
+from app.services.auth_service import AuthService
+from app.schemas.auth import (
+    RegisterRequest, RegisterResponse,
+    LoginRequest, LoginResponse,
+    RefreshTokenRequest, RefreshTokenResponse,
+    LogoutRequest, LogoutResponse,
+    ChangePasswordRequest, ChangePasswordResponse,
+    ErrorResponse
+)
+from app.schemas.user import UserResponse, UserUpdate
+from app.api.auth_dependencies import get_current_active_user, get_current_admin_user
 from app.models.user import User
-from app.schemas.auth import LoginRequest, LoginResponse, PasswordChangeRequest
-from app.schemas.user import UserCreate, User as UserSchema, UserInDB
-from app.services.auth_service import get_current_user, get_admin_user
 
-router = APIRouter(prefix="/auth", tags=["authentication"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/register",
+    response_model=RegisterResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        409: {"model": ErrorResponse, "description": "User already exists"}
+    }
+)
+async def register(
+    user_data: RegisterRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Register a new user account.
+    
+    - **username**: Unique username (3-50 characters, alphanumeric + underscore)
+    - **password**: Password (minimum 4 characters)
+    - **email**: Valid email address (optional)
+    - **role**: User role (editor|admin, default: editor)
+    """
+    return await AuthService.register_user(db, user_data)
+
+
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication failed"}
+    }
+)
 async def login(
     login_data: LoginRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Authenticate user and return access token."""
+    """
+    Authenticate user and return access/refresh tokens.
     
-    # Get user by username
-    result = await db.execute(select(User).where(User.username == login_data.username))
-    user = result.scalar_one_or_none()
+    - **username**: User's username
+    - **password**: User's password
+    """
+    return await AuthService.login_user(db, login_data)
+
+
+@router.post(
+    "/refresh",
+    response_model=RefreshTokenResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Invalid refresh token"}
+    }
+)
+async def refresh_token(
+    token_data: RefreshTokenRequest
+):
+    """
+    Refresh access token using refresh token.
     
-    # Verify user exists and password is correct
-    if not user or not verify_password(login_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    - **refresh_token**: Valid refresh token
+    """
+    return await AuthService.refresh_tokens(token_data.refresh_token)
+
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse
+)
+async def logout(
+    logout_data: LogoutRequest = LogoutRequest(),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Invalidate user session and tokens.
     
-    # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username, "user_id": user.id, "role": user.role},
-        expires_delta=access_token_expires
-    )
-    
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert to seconds
-        user={
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "role": user.role,
-            "created_at": user.created_at.isoformat(),
-            "updated_at": user.updated_at.isoformat()
+    Note: In this implementation, we rely on token expiration.
+    In production, you might want to maintain a blacklist of tokens.
+    """
+    return {
+        "success": True,
+        "message": "Logout successful"
+    }
+
+
+@router.get(
+    "/me",
+    response_model=dict,
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
+)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Retrieve current authenticated user's profile.
+    """
+    return {
+        "success": True,
+        "data": {
+            "user": {
+                "id": current_user.id,
+                "username": current_user.username,
+                "email": current_user.email,
+                "role": current_user.role,
+                "created_at": current_user.created_at.isoformat(),
+                "updated_at": current_user.updated_at.isoformat()
+            }
         }
-    )
+    }
 
 
-@router.get("/me", response_model=UserSchema)
-async def get_current_user_info(
-    current_user: UserSchema = Depends(get_current_user)
-):
-    """Get current user information."""
-    return current_user
-
-
-@router.post("/register", response_model=UserSchema)
-async def register_user(
-    user_data: UserCreate,
-    db: AsyncSession = Depends(get_db),
-    _: UserSchema = Depends(get_admin_user)  # Only admins can create users
-):
-    """Register a new user (Admin only)."""
-    
-    # Hash password
-    hashed_password = get_password_hash(user_data.password)
-    
-    # Create user instance
-    db_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        password_hash=hashed_password,
-        role=user_data.role
-    )
-    
-    try:
-        db.add(db_user)
-        await db.commit()
-        await db.refresh(db_user)
-        return UserSchema.model_validate(db_user)
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username or email already exists"
-        )
-
-
-@router.post("/change-password")
-async def change_password(
-    password_data: PasswordChangeRequest,
-    current_user: UserSchema = Depends(get_current_user),
+@router.put(
+    "/me",
+    response_model=dict,
+    responses={
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
+)
+async def update_current_user_profile(
+    update_data: UserUpdate,
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Change current user's password."""
+    """
+    Update current user's profile information.
     
-    # Get user from database
-    result = await db.execute(select(User).where(User.id == current_user.id))
-    user = result.scalar_one_or_none()
+    - **email**: New email address (optional)
+    - **username**: New username (optional)
+    """
+    # Convert Pydantic model to dict, excluding None values
+    update_dict = update_data.dict(exclude_unset=True, exclude_none=True)
     
+    return await AuthService.update_user_profile(db, current_user.id, update_dict)
+
+
+@router.post(
+    "/change-password",
+    response_model=ChangePasswordResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid password"},
+        401: {"model": ErrorResponse, "description": "Authentication required"}
+    }
+)
+async def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Change current user's password.
+    
+    - **current_password**: Current password
+    - **new_password**: New password (minimum 4 characters)
+    - **confirm_password**: Confirm new password (must match new_password)
+    """
+    return await AuthService.change_password(db, current_user.id, password_data)
+
+
+# Admin endpoints
+@router.get(
+    "/users",
+    response_model=dict,
+    responses={
+        403: {"model": ErrorResponse, "description": "Admin access required"}
+    }
+)
+async def list_users(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    role: Optional[str] = Query(None, regex="^(editor|admin)$", description="Filter by role"),
+    search: Optional[str] = Query(None, description="Search by username or email"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve list of all users (admin only).
+    
+    - **page**: Page number (default: 1)
+    - **limit**: Items per page (default: 10, max: 100)
+    - **role**: Filter by role (editor|admin)
+    - **search**: Search by username or email
+    """
+    skip = (page - 1) * limit
+    return await AuthService.get_all_users(db, skip, limit, role, search)
+
+
+@router.get(
+    "/users/{user_id}",
+    response_model=dict,
+    responses={
+        403: {"model": ErrorResponse, "description": "Admin access required"},
+        404: {"model": ErrorResponse, "description": "User not found"}
+    }
+)
+async def get_user_by_id(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve specific user information (admin only).
+    
+    - **user_id**: User ID
+    """
+    user = await AuthService.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            detail={
+                "success": False,
+                "error": "USER_NOT_FOUND",
+                "message": "User not found"
+            }
         )
     
-    # Verify current password
-    if not verify_password(password_data.current_password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect"
-        )
-    
-    # Update password
-    user.password_hash = get_password_hash(password_data.new_password)
-    await db.commit()
-    
-    return {"message": "Password updated successfully"}
+    return {
+        "success": True,
+        "data": {
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "role": user.role,
+                "created_at": user.created_at.isoformat(),
+                "updated_at": user.updated_at.isoformat()
+            }
+        }
+    }
 
 
-@router.post("/logout")
-async def logout(
-    current_user: UserSchema = Depends(get_current_user)
+@router.put(
+    "/users/{user_id}",
+    response_model=dict,
+    responses={
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        403: {"model": ErrorResponse, "description": "Admin access required"},
+        404: {"model": ErrorResponse, "description": "User not found"}
+    }
+)
+async def update_user(
+    user_id: int,
+    update_data: UserUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Logout user (placeholder - JWT tokens are stateless)."""
-    return {"message": "Successfully logged out"} 
+    """
+    Update user information (admin only).
+    
+    - **user_id**: User ID
+    - **username**: New username (optional)
+    - **email**: New email address (optional)  
+    - **role**: New role (editor|admin, optional)
+    """
+    # Convert Pydantic model to dict, excluding None values
+    update_dict = update_data.dict(exclude_unset=True, exclude_none=True)
+    
+    return await AuthService.update_user_by_admin(db, user_id, update_dict)
+
+
+@router.delete(
+    "/users/{user_id}",
+    response_model=dict,
+    responses={
+        400: {"model": ErrorResponse, "description": "Cannot delete self"},
+        403: {"model": ErrorResponse, "description": "Admin access required"},
+        404: {"model": ErrorResponse, "description": "User not found"}
+    }
+)
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete user account (admin only).
+    
+    - **user_id**: User ID
+    
+    Note: Users cannot delete their own account.
+    """
+    return await AuthService.delete_user(db, user_id, current_user.id) 

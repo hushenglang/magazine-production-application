@@ -67,7 +67,6 @@ The application follows a **monolithic architecture** pattern, providing simplic
 - **API Style**: RESTful APIs
 - **Authentication**: JWT with session management
 - **Validation**: Pydantic for request/response validation
-- **Async Support**: AsyncIO for concurrent operations
 
 ### 2.3 Database
 - **Primary Database**: MySQL 8.4
@@ -118,42 +117,7 @@ src/
 
 ### 3.2 Backend Components
 
-#### 3.2.1 API Structure
-```
-app/
-├── api/
-│   └── routers/
-│       ├── auth.py
-│       ├── content.py
-│       ├── magazine.py
-│       └── upload.py
-├── core/
-│   ├── config.py
-│   ├── security.py
-│   └── database.py
-├── models/
-│   ├── user.py
-│   ├── content.py
-│   ├── magazine.py
-│   └── content_type.py
-├── schemas/
-│   ├── user.py
-│   ├── content.py
-│   ├── magazine.py
-│   └── auth.py
-├── services/
-│   ├── auth_service.py
-│   ├── content_scraping_service.py
-│   ├── gemini_service.py
-│   ├── image_processing_service.py
-│   └── magazine_service.py
-├── utils/
-│   ├── logger.py
-│   └── helpers.py
-└── main.py
-```
-
-#### 3.2.2 Core Services
+#### 3.2.1 Core Services
 
 ##### Authentication Service
 - **Purpose**: Authentication and authorization dependency injection
@@ -163,16 +127,21 @@ app/
   - Current user context management
   - Security middleware integration
 
+##### Content Management Service
+- **Purpose**: Content management and storage
+- **Features**:
+  - Content storage and retrieval
+  - Content metadata management
+
 ##### Content Scraping Service
 - **Library**: Trafilatura for content extraction
 - **Features**: 
   - URL validation and sanitization
-  - Content type detection
   - Image URL extraction
   - Error handling for failed requests
   - Content cleaning and formatting
 
-##### Gemini Integration Service
+##### Content Processing Service
 - **Purpose**: AI-powered content processing
 - **Functions**:
   - Title generation
@@ -283,62 +252,3 @@ CREATE TABLE magazine_content (
     FOREIGN KEY (content_id) REFERENCES content(id)
 );
 ```
-
-## 5. Deployment Architecture
-
-### 5.1 Infrastructure Setup
-
-#### 5.1.1 AliCloud ECS Configuration
-- **Instance Type**: ecs.g6.large (2 vCPU, 8GB RAM) or similar
-- **Operating System**: Ubuntu 20.04 LTS
-- **Storage**: 20GB SSD for system + additional data disk for media
-- **Network**: VPC with security group configuration
-- **Backup**: Automated snapshot backups
-
-#### 5.1.2 Python Environment Setup
-- **Package Manager**: UV for fast dependency installation and virtual environment management
-- **Environment Management**: UV-managed virtual environments
-- **Dependency Lock**: `uv.lock` file for reproducible builds
-- **Installation**: Fast parallel dependency resolution and installation
-
-
-## 6. Performance Optimization
-
-### 6.1 Frontend Optimization
-- **Code Splitting**: Lazy loading for route components
-- **Image Optimization**: WebP format, responsive images
-- **Caching**: Browser caching for static assets
-- **Bundle Optimization**: Tree shaking and minification
-
-### 6.2 Backend Optimization
-- **Database Indexing**: Optimized queries with proper indexes
-- **Connection Pooling**: Efficient database connections
-- **Image Processing**: Async processing for large images
-
-## 7. Monitoring & Logging
-
-### 7.1 Application Monitoring
-- **Health Checks**: Basic health endpoint monitoring
-- **Error Tracking**: Structured error logging
-- **Performance Metrics**: Response time and throughput monitoring
-
-
-## 8. Future Considerations
-
-### 8.1 Scalability Path
-- **Horizontal Scaling**: Load balancer + multiple app instances
-- **Database Scaling**: Read replicas for improved performance
-- **CDN Integration**: Content delivery network for media files
-- **Microservices Migration**: Breaking down monolith as needed
-
-### 8.2 Feature Enhancements
-- **Caching Layer**: Redis for session and content caching
-- **Queue System**: Background job processing for heavy operations
-- **API Rate Limiting**: Advanced rate limiting and throttling
-- **Advanced Monitoring**: APM tools like New Relic or DataDog
-
-### 8.3 Development Workflow
-- **Environment Management**: UV provides fast virtual environment creation and management
-- **Dependency Resolution**: UV's Rust-based resolver provides faster and more reliable dependency resolution
-- **Lock Files**: `uv.lock` ensures reproducible builds across environments
-- **CI/CD Integration**: UV's speed improves build times in continuous integration pipelines

@@ -1,45 +1,49 @@
-from pydantic_settings import BaseSettings
+"""
+Application configuration settings.
+"""
+
 from typing import Optional
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 
 class Settings(BaseSettings):
-    # Application
-    APP_NAME: str = "Magazine Production API"
-    VERSION: str = "1.0.0"
-    DEBUG: bool = False
+    """Application settings."""
     
-    # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    ALGORITHM: str = "HS256"
+    # App Configuration
+    app_name: str = "Magazine Production Service"
+    app_version: str = "1.0.0"
+    debug: bool = Field(default=False, env="DEBUG")
     
-    # Database
-    DATABASE_URL: Optional[str] = None
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
-    DB_PASSWORD: str = "password"
-    DB_NAME: str = "magazine_production"
+    # Database Configuration
+    database_url: str = Field(
+        default="mysql+aiomysql://hushenglang:hushenglang@mysql-container.orb.local:3306/magazine_production_db",
+        env="DATABASE_URL"
+    )
     
-    # CORS
-    CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:5173"]
+    # Security Configuration
+    secret_key: str = Field(
+        default="your-super-secret-key-change-in-production",
+        env="SECRET_KEY"
+    )
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    refresh_token_expire_days: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
     
-    # Google Gemini API
-    GEMINI_API_KEY: Optional[str] = None
+    # CORS Configuration
+    allowed_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        env="ALLOWED_ORIGINS"
+    )
     
-    # File Storage
-    UPLOAD_DIR: str = "uploads"
-    MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
+    # Server Configuration
+    host: str = Field(default="0.0.0.0", env="HOST")
+    port: int = Field(default=8000, env="PORT")
     
     class Config:
         env_file = ".env"
-        case_sensitive = True
-
-    @property
-    def database_url(self) -> str:
-        if self.DATABASE_URL:
-            return self.DATABASE_URL
-        return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        env_file_encoding = "utf-8"
 
 
+# Global settings instance
 settings = Settings() 
